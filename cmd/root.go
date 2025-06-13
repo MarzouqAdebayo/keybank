@@ -1,51 +1,71 @@
 /*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-
+Copyright © 2025 Marzouq Adebayo marzouqaadebayo@gmail.com
 */
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
+var cfgFile string
 
-
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "keybank",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "Manage SSH & GPG keys, remote profiles, and SSH sessions",
+	Long: `Keybank is a CLI tool for securely managing your SSH and GPG keys,
+associating them with remote hosts, and launching SSH sessions using
+saved connection profiles.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+Examples:
+  # List all SSH keys
+  keybank keys list ssh
+
+  # Add a GPG key by fingerprint
+  keybank keys add gpg --id ABCD1234
+
+  # Create a remote profile for production
+  keybank remote add prod-db --host example.com --user ubuntu --ssh-key ~/.ssh/prod.pem
+
+  # Connect to production database via SSH
+  keybank ssh prod-db
+`,
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Println("Welcome to keybank, use keybank --help to get started")
+	},
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.keybank.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	cobra.OnInitialize(initConfig)
+	// Global persistent flags
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.keybank.yaml)")
 }
 
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+	} else {
+		home, err := os.UserHomeDir()
+		cobra.CheckErr(err)
+		viper.AddConfigPath(home + "/.keybank")
+		viper.SetConfigType("yaml")
+		viper.SetConfigName("config")
+	}
 
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	}
+}
