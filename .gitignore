@@ -1,0 +1,13 @@
+# Binaries
+/keybank
+
+# Go modules
+/go.sum
+
+# IDE files
+*.swp
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
