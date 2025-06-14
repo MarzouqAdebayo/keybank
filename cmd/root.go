@@ -6,12 +6,19 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var cfgFile string
+var (
+	appDir     string
+	configFile string
+)
+
+const defaultConfigFile = ".keybank"
 
 var rootCmd = &cobra.Command{
 	Use:   "keybank",
@@ -47,20 +54,41 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	home, err := os.UserHomeDir()
+	cobra.CheckErr(err)
+
+	defaultAppDir := filepath.Join(home, defaultConfigFile)
+
 	// Global persistent flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.keybank.yaml)")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is $HOME/.keybank/.keybank.yaml)")
+	rootCmd.PersistentFlags().StringVar(&appDir, "app-dir", defaultAppDir, "where keybank stores all its data")
+
+	viper.BindPFlag("appDir", rootCmd.PersistentFlags().Lookup("app-dir"))
+	viper.SetDefault("appDir", defaultAppDir)
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
+	if configFile != "" {
+		viper.SetConfigFile(configFile)
 	} else {
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
-		viper.AddConfigPath(home + "/.keybank")
-		viper.SetConfigType("yaml")
-		viper.SetConfigName("config")
+
+		defaultAppDir := filepath.Join(home, defaultConfigFile)
+
+		viper.AddConfigPath(".")
+		viper.AddConfigPath(defaultAppDir)
+		ext := strings.ToLower(filepath.Ext(configFile))
+		switch ext {
+		case ".yaml", ".yml":
+			viper.SetConfigType("yaml")
+		case ".json":
+			viper.SetConfigType("json")
+		default:
+		}
+		viper.SetConfigName("keybank")
 	}
 
 	viper.AutomaticEnv()

@@ -4,13 +4,9 @@ Copyright © 2025 Marzouq Adebayo marzouqaadebayo@gmail.com
 package cmd
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-
 	"github.com/spf13/cobra"
+
+	"github.com/MarzouqAdebayo/keybank/internal/core"
 )
 
 // keysCmd represents the keys command
@@ -26,64 +22,46 @@ var listCmd = &cobra.Command{
 	Long:  "List all SSH or GPG keys managed by Keybank.",
 }
 
+var addCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add",
+	Long:  "Add",
+}
+
+var addRemoteCmd = &cobra.Command{
+	Use:   "remote",
+	Short: "Add remote",
+	Long:  "Add new remote profile",
+	Run:   core.AddNewRemoteProfile,
+}
+
 var listSSHCmd = &cobra.Command{
 	Use:   "ssh",
 	Short: "List SSH keys",
-	Run:   runListSSH,
+	Run:   core.RunListSSH,
 }
 
 var listGPGCmd = &cobra.Command{
 	Use:   "gpg",
 	Short: "List GPG keys",
-	Run:   runListGPG,
+	Run:   core.RunListGPG,
 }
 
 func init() {
 	rootCmd.AddCommand(keysCmd)
+	rootCmd.AddCommand(addCmd)
+
+	// Flags
+	addRemoteCmd.Flags().StringP("tag", "t", "", "Add a unique tag to the profile")
+	addRemoteCmd.Flags().StringP("host", "r", "", "Remote profile host")
+	addRemoteCmd.Flags().StringP("user", "u", "", "Remote profile user")
+	addRemoteCmd.Flags().StringP("port", "p", "", "Remote profile port")
+	addRemoteCmd.Flags().StringP("ssh_key", "s", "", "Remote profile ssh key file path")
+	addRemoteCmd.MarkFlagsRequiredTogether("tag", "host", "user", "port", "ssh_key")
 
 	// keys subcommands
 	keysCmd.AddCommand(listCmd)
 	listCmd.AddCommand(listSSHCmd)
 	listCmd.AddCommand(listGPGCmd)
-}
-
-func runListSSH(cmd *cobra.Command, args []string) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "▸ unable to find home directory: %v\n", err)
-		os.Exit(1)
-	}
-	sshDir := filepath.Join(home, ".ssh")
-	files, err := os.ReadDir(sshDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "▸ error scanning ~/.ssh: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("SSH keys found:")
-	for _, file := range files {
-		filename := file.Name()
-		base := filepath.Base(filename)
-		// skipping pub keys and known non-key files
-		if file.IsDir() || strings.HasSuffix(base, ".pub") || strings.HasPrefix(base, "known_hosts") || strings.HasPrefix(base, "config") || strings.HasSuffix(base, ".gitconfig") {
-			continue
-		}
-		fmt.Printf("  • %s\n", base)
-	}
-}
-
-func runListGPG(cmd *cobra.Command, args []string) {
-	fmt.Println("GPG keys:")
-	g := exec.Command("gpg", "--list-secret-keys", "--keyid-format=long")
-	// g.Stdout = os.Stdout
-	// g.Stderr = os.Stderr
-	output, err := g.CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "▸ error invoking gpg: %v\n", err)
-		os.Exit(1)
-	}
-	lines := strings.Split(string(output), "\n")
-	for i, line := range lines {
-		fmt.Printf("%d. -- %s\n", i+1, line)
-	}
+	addCmd.AddCommand(addRemoteCmd)
 }
