@@ -9,30 +9,18 @@ import (
 	"github.com/MarzouqAdebayo/keybank/internal/core"
 )
 
-// keysCmd represents the keys command
+// keysCmd
 var keysCmd = &cobra.Command{
 	Use:   "keys",
 	Short: "Manage SSH & GPG keys",
 	Long:  `Add, list, and remove SSH and GPG keys tracked by keybank`,
 }
 
+// listCmd
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List keys",
 	Long:  "List all SSH or GPG keys managed by Keybank.",
-}
-
-var addCmd = &cobra.Command{
-	Use:   "add",
-	Short: "Add",
-	Long:  "Add",
-}
-
-var addRemoteCmd = &cobra.Command{
-	Use:   "remote",
-	Short: "Add remote",
-	Long:  "Add new remote profile",
-	Run:   core.AddNewRemoteProfile,
 }
 
 var listSSHCmd = &cobra.Command{
@@ -47,21 +35,40 @@ var listGPGCmd = &cobra.Command{
 	Run:   core.RunListGPG,
 }
 
+// remoteCmd
+var remoteCmd = &cobra.Command{
+	Use:   "remote",
+	Short: "Add remote",
+	Long:  "Add new remote profile",
+	Run:   core.AddNewRemoteProfile,
+}
+
+var newRemoteProfile = &cobra.Command{
+	Use:   "new",
+	Short: "New remote profile",
+	Long:  "Add new remote profile",
+	Run:   core.AddNewRemoteProfile,
+}
+
 func init() {
 	rootCmd.AddCommand(keysCmd)
-	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(remoteCmd)
 
 	// Flags
-	addRemoteCmd.Flags().StringP("tag", "t", "", "Add a unique tag to the profile")
-	addRemoteCmd.Flags().StringP("host", "r", "", "Remote profile host")
-	addRemoteCmd.Flags().StringP("user", "u", "", "Remote profile user")
-	addRemoteCmd.Flags().StringP("port", "p", "", "Remote profile port")
-	addRemoteCmd.Flags().StringP("ssh_key", "s", "", "Remote profile ssh key file path")
-	addRemoteCmd.MarkFlagsRequiredTogether("tag", "host", "user", "port", "ssh_key")
+	remoteCmd.Flags().StringP("tag", "t", "", "Add a unique tag to the profile")
+	remoteCmd.Flags().StringP("host", "r", "", "Remote profile host")
+	remoteCmd.Flags().StringP("user", "u", "", "Remote profile user")
+	remoteCmd.Flags().StringP("port", "p", "", "Remote profile port")
+	remoteCmd.Flags().StringP("ssh_key", "s", "", "Remote profile ssh key file path")
+	remoteCmd.MarkFlagsRequiredTogether("tag", "host", "user", "port", "ssh_key")
 
 	// keys subcommands
 	keysCmd.AddCommand(listCmd)
+
+	// list subcommands
 	listCmd.AddCommand(listSSHCmd)
 	listCmd.AddCommand(listGPGCmd)
-	addCmd.AddCommand(addRemoteCmd)
+
+	// Remote subcommands
+	remoteCmd.AddCommand(newRemoteProfile)
 }

@@ -14,6 +14,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const DefaultUser = "root"
+const DefaultPort = "22"
+
 type RemoteProfile struct {
 	ID     int    `yaml:"id" json:"id"`
 	Tag    string `yaml:"tag" json:"tag"`
@@ -22,6 +25,21 @@ type RemoteProfile struct {
 	Port   string `yaml:"port" json:"port"`
 	SSHKey string `yaml:"ssh_key" json:"ssh_key"`
 	GPGKey string `yaml:"gpg_key,omitempty" json:"gpg_key,omitempty"`
+}
+
+func newRemoteProfile() RemoteProfile {
+	return RemoteProfile{
+		User: DefaultUser,
+		Port: DefaultPort,
+	}
+}
+
+func (rp RemoteProfile) Marshal() ([]byte, error) {
+	return yaml.Marshal(rp)
+}
+
+func (rp RemoteProfile) Unmarshal(in []byte) error {
+	return yaml.Unmarshal(in, rp)
 }
 
 type Config struct {
@@ -34,14 +52,6 @@ func (cfg *Config) Marshal() ([]byte, error) {
 
 func (cfg *Config) Unmarshal(in []byte) error {
 	return yaml.Unmarshal(in, cfg)
-}
-
-func (rp RemoteProfile) Marshal() ([]byte, error) {
-	return yaml.Marshal(rp)
-}
-
-func (rp RemoteProfile) Unmarshal(in []byte) error {
-	return yaml.Unmarshal(in, rp)
 }
 
 func validateAddNewRemoteProfileFlags(cmd *cobra.Command, flag string) (string, error) {
@@ -82,13 +92,12 @@ func AddNewRemoteProfile(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	newProfile := RemoteProfile{
-		Tag:    tag,
-		User:   user,
-		Host:   host,
-		Port:   port,
-		SSHKey: ssh_key,
-	}
+	newProfile := newRemoteProfile()
+	newProfile.Tag = tag
+	newProfile.User = user
+	newProfile.Host = host
+	newProfile.Port = port
+	newProfile.SSHKey = ssh_key
 
 	configDir := viper.GetString("appDir")
 	exists, err := utils.DirExists(configDir)
@@ -127,6 +136,13 @@ func AddNewRemoteProfile(cmd *cobra.Command, args []string) {
 	if err != nil {
 		cmd.PrintErrln(err.Error())
 		return
+	}
+
+	for _, profile := range prevCfg.Profiles {
+		if profile.Tag == newProfile.Tag {
+			cmd.PrintErrln("You need to provide a unique tag")
+			return
+		}
 	}
 
 	if len(prevCfg.Profiles) == 0 {
