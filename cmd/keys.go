@@ -40,7 +40,6 @@ var remoteCmd = &cobra.Command{
 	Use:   "remote",
 	Short: "Add remote",
 	Long:  "Add new remote profile",
-	Run:   core.AddNewRemoteProfile,
 }
 
 var newRemoteProfile = &cobra.Command{
@@ -50,17 +49,29 @@ var newRemoteProfile = &cobra.Command{
 	Run:   core.AddNewRemoteProfile,
 }
 
+// ssh
+var sshCmd = &cobra.Command{
+	Use:                "ssh",
+	Short:              "Connect with profile",
+	Long:               "Connect to a remote server via ssh using saved profile",
+	DisableFlagParsing: true,
+	Run:                core.SSHIntoProfile,
+}
+
 func init() {
 	rootCmd.AddCommand(keysCmd)
 	rootCmd.AddCommand(remoteCmd)
 
-	// Flags
-	remoteCmd.Flags().StringP("tag", "t", "", "Add a unique tag to the profile")
-	remoteCmd.Flags().StringP("host", "r", "", "Remote profile host")
-	remoteCmd.Flags().StringP("user", "u", "", "Remote profile user")
-	remoteCmd.Flags().StringP("port", "p", "", "Remote profile port")
-	remoteCmd.Flags().StringP("ssh_key", "s", "", "Remote profile ssh key file path")
-	remoteCmd.MarkFlagsRequiredTogether("tag", "host", "user", "port", "ssh_key")
+	rootCmd.AddCommand(sshCmd)
+
+	// Remote subcommands
+	newRemoteProfile.Flags().StringP("tag", "t", "", "Add a unique tag to the profile")
+	newRemoteProfile.Flags().StringP("host", "r", "", "Remote profile host")
+	newRemoteProfile.Flags().StringP("user", "u", "", "Remote profile user")
+	newRemoteProfile.Flags().StringP("port", "p", "", "Remote profile port")
+	newRemoteProfile.Flags().StringP("ssh_key", "s", "", "Remote profile ssh key file path")
+	newRemoteProfile.MarkFlagsRequiredTogether("tag", "host", "user", "ssh_key")
+	remoteCmd.AddCommand(newRemoteProfile)
 
 	// keys subcommands
 	keysCmd.AddCommand(listCmd)
@@ -69,6 +80,4 @@ func init() {
 	listCmd.AddCommand(listSSHCmd)
 	listCmd.AddCommand(listGPGCmd)
 
-	// Remote subcommands
-	remoteCmd.AddCommand(newRemoteProfile)
 }

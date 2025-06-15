@@ -3,19 +3,27 @@ package core
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/MarzouqAdebayo/keybank/internal/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultUser = "root"
-const DefaultPort = "22"
+const (
+	DefaultUser        = "root"
+	DefaultPort        = "22"
+	ProfilesFileName   = "profiles.yaml"
+	ConfigViperDirFlag = "appDir"
+	ConfigFileName     = ".keybank.yaml"
+)
 
 type RemoteProfile struct {
 	ID     int    `yaml:"id" json:"id"`
@@ -25,13 +33,6 @@ type RemoteProfile struct {
 	Port   string `yaml:"port" json:"port"`
 	SSHKey string `yaml:"ssh_key" json:"ssh_key"`
 	GPGKey string `yaml:"gpg_key,omitempty" json:"gpg_key,omitempty"`
-}
-
-func newRemoteProfile() RemoteProfile {
-	return RemoteProfile{
-		User: DefaultUser,
-		Port: DefaultPort,
-	}
 }
 
 func (rp RemoteProfile) Marshal() ([]byte, error) {
@@ -65,106 +66,187 @@ func validateAddNewRemoteProfileFlags(cmd *cobra.Command, flag string) (string, 
 	return tag, nil
 }
 
+func ParseTagforSSH(args []string) (string, []string, error) {
+	var tag string
+
+	flagSet := pflag.NewFlagSet("ssh", pflag.ContinueOnError)
+	flagSet.StringP("tag", "t", "", "Remote profile tag")
+	flagSet.SetOutput(io.Discard)
+
+	_ = flagSet.Parse(args)
+
+	if len(tag) == 0 {
+		return "", nil, errors.New("tag flag is required")
+	}
+
+	remainingArgs := []string{}
+	index := 0
+	for index+1 < len(args) {
+		arg := args[index]
+		nextArg := args[index+1]
+		if strings.HasPrefix(arg, "---") {
+			return "", nil, errors.New("Invalid flags passed")
+		}
+
+		if arg == "-tag" || arg == "--tag" {
+			if strings.HasPrefix(nextArg, "-") {
+				return "", nil, errors.New("No arguments passed for reqired flag: tag")
+			} else {
+				index += 2
+			}
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+			index += 1
+		}
+	}
+	remainingArgs = append(remainingArgs, args[index])
+
+	return tag, remainingArgs, nil
+}
+
+func SSHIntoProfile(cmd *cobra.Command, args []string) {
+	template := "Usage:\n keybank ssh [flags]\n\nFlags:\n -tag remote profile tag\n [flag] underlying ssh flags\n"
+
+	tag, remainingArgs, err := ParseTagforSSH(args)
+
+	if err != nil {
+		cmd.Println(template)
+		return
+	}
+
+	configDir := viper.GetString(ConfigViperDirFlag)
+	profileFilePath := filepath.Join(configDir, ProfilesFileName)
+
+	data, err := os.ReadFile(profileFilePath)
+	if err != nil {
+		cmd.Println("Error failed here 111")
+		cmd.PrintErrln(err.Error())
+		return
+	}
+
+	savedProfiles := &Config{}
+	err = savedProfiles.Unmarshal(data)
+	if err != nil {
+		cmd.PrintErrln(err.Error())
+		return
+	}
+
+	var profile *RemoteProfile
+	for _, savedProfile := range savedProfiles.Profiles {
+		if savedProfile.Tag == tag {
+			profile = &savedProfile
+			break
+		}
+	}
+
+	if profile == nil {
+		cmd.Printf("Profile with tag '%s' does not exist", tag)
+		return
+	}
+
+	sshBin, err := exec.LookPath("ssh")
+	if err != nil {
+		cmd.PrintErrf("ssh not found in PATH: %v\n", err)
+		return
+	}
+	execArgs := []string{
+		sshBin,
+		"%s@%s", profile.User, profile.Host,
+		"-i", profile.SSHKey,
+		"-p", profile.Port,
+	}
+	execArgs = append(args, remainingArgs...)
+
+	env := os.Environ()
+	if err := syscall.Exec(sshBin, execArgs, env); err != nil {
+		cmd.PrintErrf("Failed to exec ssh: %v\n", err)
+	}
+}
+
 func AddNewRemoteProfile(cmd *cobra.Command, args []string) {
-	tag, err := validateAddNewRemoteProfileFlags(cmd, "tag")
-	if err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
-	host, err := validateAddNewRemoteProfileFlags(cmd, "host")
-	if err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
-	user, err := validateAddNewRemoteProfileFlags(cmd, "user")
-	if err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
-	port, err := validateAddNewRemoteProfileFlags(cmd, "port")
-	if err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
-	ssh_key, err := validateAddNewRemoteProfileFlags(cmd, "ssh_key")
-	if err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
+	tag, _ := cmd.Flags().GetString("tag")
+	host, _ := cmd.Flags().GetString("host")
+	user, _ := cmd.Flags().GetString("user")
+	port, _ := cmd.Flags().GetString("port")
+	sshKey, _ := cmd.Flags().GetString("ssh_key")
 
-	newProfile := newRemoteProfile()
-	newProfile.Tag = tag
-	newProfile.User = user
-	newProfile.Host = host
-	newProfile.Port = port
-	newProfile.SSHKey = ssh_key
-
-	configDir := viper.GetString("appDir")
-	exists, err := utils.DirExists(configDir)
-	if !exists && err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
-
-	if !exists {
-		if err := utils.CreateDir(configDir); err != nil {
-			cmd.PrintErrln(err.Error())
+	for name, val := range map[string]string{
+		"tag": tag, "host": host, "user": user, "ssh-key": sshKey,
+	} {
+		if val == "" {
+			cmd.PrintErrf("Error: --%s is required\n", name)
 			return
 		}
 	}
 
-	profileFilePath := filepath.Join(configDir, "profiles.yaml")
-
-	exists, err = utils.FileExists(profileFilePath)
-	if !exists && err != nil {
-		cmd.PrintErrln(err.Error())
-		return
+	newProfile := RemoteProfile{
+		Tag:    tag,
+		Host:   host,
+		User:   user,
+		Port:   DefaultPort,
+		SSHKey: sshKey,
+	}
+	if port != "" {
+		newProfile.Port = port
 	}
 
-	var data []byte
-	if exists {
-		data, err = os.ReadFile(profileFilePath)
+	base := viper.GetString(ConfigViperDirFlag)
+	if err := utils.CreateDir(base); err != nil {
+		cmd.PrintErrf("Error creating config dir %q: %v\n", base, err)
+		return
+	}
+	cfgPath := filepath.Join(base, ProfilesFileName)
+
+	profileFilePath := filepath.Join(cfgPath, "profiles.yaml")
+
+	cfg := &Config{}
+	if exists, err := utils.FileExists(profileFilePath); err != nil {
+		cmd.PrintErrf("Error checking profiles file: %v\n", err)
+		return
+	} else if exists {
+		data, err := os.ReadFile(profileFilePath)
 		if err != nil {
-			cmd.Println("Error failed here 111")
-			cmd.PrintErrln(err.Error())
+			cmd.PrintErrf("Error reading config: %v\n", err)
+			return
+		}
+		if err = cfg.Unmarshal(data); err != nil {
+			cmd.PrintErrf("Error parsing config: %v\n", err)
 			return
 		}
 	}
 
-	prevCfg := &Config{}
-	err = prevCfg.Unmarshal(data)
-	if err != nil {
-		cmd.PrintErrln(err.Error())
-		return
-	}
-
-	for _, profile := range prevCfg.Profiles {
+	for _, profile := range cfg.Profiles {
 		if profile.Tag == newProfile.Tag {
 			cmd.PrintErrln("You need to provide a unique tag")
 			return
 		}
 	}
 
-	if len(prevCfg.Profiles) == 0 {
-		newProfile.ID = 0
-	} else {
-		newProfile.ID = prevCfg.Profiles[len(prevCfg.Profiles)-1].ID + 1
-	}
-
-	prevCfg.Profiles = append(prevCfg.Profiles, newProfile)
-	b, err := prevCfg.Marshal()
-	if err != nil {
+	if exists, err := utils.FileExists(newProfile.SSHKey); err != nil {
 		cmd.PrintErrln(err.Error())
+		return
+	} else if !exists {
+		cmd.PrintErrf("Error: SSH key %q does not exist\n", newProfile.SSHKey)
 		return
 	}
 
-	err = os.WriteFile(profileFilePath, b, 0644)
+	if len(cfg.Profiles) > 0 {
+		newProfile.ID = cfg.Profiles[len(cfg.Profiles)-1].ID + 1
+	}
+	cfg.Profiles = append(cfg.Profiles, newProfile)
+
+	out, err := cfg.Marshal()
 	if err != nil {
-		cmd.Println("Error failed here")
-		cmd.PrintErrln(err.Error())
+		cmd.PrintErrf("Error serializing config: %v\n", err)
 		return
 	}
-	cmd.Println(fmt.Sprintf("New profile with tag: %s added", newProfile.Tag))
+
+	if err = os.WriteFile(profileFilePath, out, 0o600); err != nil {
+		cmd.PrintErrf("Error writing config: %v\n", err)
+		return
+	}
+
+	cmd.Println(fmt.Sprintf("✅ New profile %q added\n", newProfile.Tag))
 }
 
 func RunListSSH(cmd *cobra.Command, args []string) {

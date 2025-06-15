@@ -2,7 +2,6 @@ package utils
 
 import (
 	"errors"
-	"fmt"
 	"os"
 )
 
@@ -29,9 +28,5 @@ func DirExists(dirPath string) (bool, error) {
 }
 
 func CreateDir(dirPath string) error {
-	if err := os.MkdirAll(dirPath, 0o700); err != nil {
-		fmt.Fprintf(os.Stderr, "▸ could not create config directory %q: %v\n", dirPath, err)
-		return err
-	}
-	return nil
+	return os.MkdirAll(dirPath, 0o700)
 }
